@@ -375,7 +375,7 @@ class SQL_Sketch_Condition
                 $ret[1][$vl] = $v;
                 ++$c;
             }
-            $ret[0] = sprintf('(%s IN (%s))', $this->label, implode(',',$values));
+            $ret[0] = sprintf('(%s %s (%s))', $this->label, $this->operator, implode(',',$values));
             break;
         case 'BETWEEN':
             $ret[1] = array(
