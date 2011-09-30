@@ -28,9 +28,9 @@ class SQL_Sketch
         $this->joinTables[$table] = true;
     }
 
-    public function addSelectColumn($clm)
+    public function addSelectColumn($clm, $as = null)
     {
-        $this->select[] = $clm;
+        $this->select[] = (is_null($as)) ? $clm : "{$clm} AS {$as}";
         return $this;
     }
 
@@ -57,12 +57,9 @@ class SQL_Sketch
 
     public function addOrderByColumn($clm, $asc_desc = null)
     {
-        if (is_null($asc_desc)) {
-            $this->orderby[] = $clm;
-        }
-        else {
-            $this->orderby[] = "{$clm} {$asc_desc}";
-        }
+        $this->orderby[] = (is_null($asc_desc))
+            ? $clm
+            : "{$clm} {$asc_desc}";
         return $this;
     }
 
@@ -148,8 +145,21 @@ class SQL_Sketch
             }
             $select .= " LIMIT ". implode(',', $limit);
         }
-
+        
         return array($select, $binds);
+    }
+
+    public function count($id = '*', $as = null)
+    {
+        $select = $this->select;
+        $cnt = (is_null($as)) ? "COUNT({$id})" : "COUNT({$id}) AS {$as}";
+        $this->select = array($cnt);
+
+        $ret = $this->select();
+
+        $this->select = $select;
+
+        return $ret;
     }
 
     public function update($sets)
