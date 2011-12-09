@@ -16,16 +16,25 @@ class SQL_Sketch
 
     public function __construct($table)
     {
+        $this->setTable($table);
+        $this->init();
+    }
+
+    protected function init()
+    {
         $this->select  = array();
         $this->join    = array();
         $this->where   = array();
         $this->groupby = null;
         $this->orderby = array();
 
-        $this->table = $table;
-
         $this->joinTables = array();
-        $this->joinTables[$table] = true;
+        $this->joinTables[$this->table] = true;
+    }
+
+    public function setTable($table)
+    {
+        $this->table = $table;
     }
 
     public function addSelectColumn($clm, $as = null)
@@ -104,8 +113,11 @@ class SQL_Sketch
         return $this;
     }
 
-    public function select()
+    public function select($options = array())
     {
+        if (!empty($options)) {
+            $this->parseOption($options);
+        }
         $table = $this->table;
         $columns = '*';
         if (!empty($this->select)) {
@@ -149,24 +161,37 @@ class SQL_Sketch
         return array($select, $binds);
     }
 
-    public function count($id = '*', $as = null)
+    public function count($id = '*', $options = array())
     {
+        $as = null;
+        if (isset($options['as'])) {
+            $as = $options['as'];
+            unset($options['as']);
+        }
+        else if (is_string($options)) {
+            $as = $options;
+            $options = array();
+        }
         $select = $this->select;
         $cnt = (is_null($as)) ? "COUNT({$id})" : "COUNT({$id}) AS {$as}";
         $this->select = array($cnt);
 
-        $ret = $this->select();
+        $ret = $this->select($options);
 
         $this->select = $select;
 
         return $ret;
     }
 
-    public function update($sets)
+    public function update($sets, $options = array())
     {
         $table  = $this->table;
         $update = "UPDATE {$table}";
 
+        if (!empty($options)) {
+            $this->parseOption($options);
+        }
+        
         $pl = SQL_Sketch_Condition::$objectID++;
         $setlist = array();
         $binds = array();
@@ -228,10 +253,14 @@ class SQL_Sketch
         return array($insert, $binds);
     }
 
-    public function delete()
+    public function delete($options = array())
     {
         $table  = $this->table;
         $delete = "DELETE FROM {$table}";
+
+        if (!empty($options)) {
+            $this->parseOption($options);
+        }
         
         $binds  = array();
         $wheres = array();
@@ -246,6 +275,79 @@ class SQL_Sketch
         }
 
         return array($delete, $binds);
+    }
+
+    protected function parseOption($options)
+    {
+        $this->init();
+        if (isset($options['conditions'])) {
+            $this->parseConditions($options['conditions']);
+        }
+        if (isset($options['with'])) {
+            $this->parseWith($options['with']);
+        }
+        if (isset($options['group'])) {
+            $clm = (strpos($options['group'], '.') !== false)
+                ? $options['group']
+                : $this->table .'.'. $options['group'];
+            $this->addGroupByColumn($clm);
+        }
+        if (isset($options['order'])) {
+            foreach($options['order'] as $column => $asc_desc) {
+                $clm = $this->table.'.'.$column;
+                $this->addOrderByColumn($clm, strtoupper($asc_desc));
+            }
+        }
+        if (isset($options['limit'])) {
+            $this->setLimit($options['limit']);
+        }
+    }
+
+    protected function parseConditions($conds)
+    {
+        foreach($conds as $label => $cond) {
+            $l_label = strtolower($label);
+            if ($l_label === '-and' || $l_label === '-or') {
+                $c = null;
+                foreach($cond as $_lbl => $cnd) {
+                    list($op, $val) = each($cnd);
+                    $op = strtolower($op);
+                    $clm = $_lbl;
+                    if (strpos($clm, '.') === false) {
+                        $clm = $this->table .'.'.$clm;
+                    }
+                    if (is_null($c)) {
+                        $c = $this->getCond($clm, $val, $op);
+                    }
+                    else {
+                        if ($l_label === '-or') {
+                            $c->addOr($clm, $val, $op);
+                        }
+                        else {
+                            $c->addAnd($clm, $val, $op);
+                        }
+                    }
+                }
+                $this->addCond($c);
+            }
+            else {
+                list($op, $val) = each($cond);
+                $clm = $label;
+                if (strpos($clm, '.') === false) {
+                    $clm = $this->table .'.'.$clm;
+                }
+                $this->add($label, $val, strtolower($op));
+            }
+        }
+    }
+
+    protected function parseWith($withs)
+    {
+        foreach($withs as $column => $with) {
+            list($join, $src) = each($with);
+            $ref = $this->table . '.' . $column;
+            $this->addJoin($ref, $src, strtolower($join));
+        }
     }
 }
 
